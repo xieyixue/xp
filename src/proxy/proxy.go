@@ -39,11 +39,10 @@ func (s Server) Listen() (error){
 		}
 		go s.HandleClientSocks(client)
 	}
-	return err
 
 }
 
-func (s Server) AnaHost(b [2048]byte, n int) (host string, port string) {
+func (s Server) AnaHost(b [1024]byte, n int) (host string, port string) {
 	switch b[3] {
 	case 0x01:
 		host = net.IPv4(b[4], b[5], b[6], b[7]).String()
@@ -58,25 +57,27 @@ func (s Server) AnaHost(b [2048]byte, n int) (host string, port string) {
 	return host, port
 }
 
-//func (s Server) Shovel(src, dst net.Conn, n net.Addr) {
-//	defer log.Println(src.LocalAddr(), "ss")
-//	defer log.Println(dst.LocalAddr(), "ss")
-//	defer src.Close()
-//	defer dst.Close()
-//	go s.Copy(src, dst, n)
-//	s.Copy(dst, src, n)
-//	return
-//
-//}
-
-func (s Server) SelfShovel(src, dst net.Conn, n net.Addr) {
-	defer log.Println("ssss")
+func (s Server) Shovel(src, dst net.Conn, n net.Addr) error{
 	defer src.Close()
 	defer dst.Close()
-	go s.Copy(src, dst, n)
-	s.Copy(dst, src, n)
-	return
+	errch := make(chan error, 1)
 
+	go s.chanCopy(errch, src, dst, n)
+	go s.chanCopy(errch, dst, src, n)
+
+	for i := 0; i < 2; i++ {
+		if err := <-errch; err != nil {
+			// If this returns early the second func will push into the
+			// buffer, and the GC will clean up
+			return err
+		}
+	}
+	return nil
+
+}
+func (s Server) chanCopy(e chan error, dst, src net.Conn,  n net.Addr) {
+	_, err := s.Copy(dst, src, n)
+	e <- err
 }
 
 
@@ -100,7 +101,7 @@ func (s Server) Copy(src , dst net.Conn, n net.Addr) (written int64, err error){
 		}
 		if n == src.RemoteAddr() {
 			v = 0
-			//log.Println("proxy read client")
+			log.Println("proxy read client", v)
 		}
 	}
 
@@ -108,10 +109,14 @@ func (s Server) Copy(src , dst net.Conn, n net.Addr) (written int64, err error){
 	for {
 		nr, er := src.Read(buf)
 		if nr > 0 {
+			//buf = buf[:nr]
 			if v != 2 {
-				buf = s.encode(buf[:nr], v)
+				enBuf := s.encode(buf[:nr], v)
+				buf = enBuf
+			}else {
+				buf = buf[:nr]
 			}
-			nw, ew := dst.Write(buf[:])
+			nw, ew := dst.Write(buf)
 			if nw >0 {
 				written += int64(nw)
 			}
@@ -141,7 +146,7 @@ func (s Server) HandleClientSocks(client net.Conn) {
 	}
 	defer client.Close()
 
-	var b [2048]byte
+	var b [1024]byte
 
 	n, err := client.Read(b[:])
 	if err != nil {
@@ -150,14 +155,15 @@ func (s Server) HandleClientSocks(client net.Conn) {
 	}
 
 	if b[0] == 0x05 {
+		log.Println(b[:n])
 		host, port := s.AnaHost(b, n)
 		server, err := net.DialTimeout("tcp", net.JoinHostPort(host, port), 3*time.Second)
-		log.Print("Dial start ", host, ":", port)
+		log.Print("dial start ", host, ":", port)
 		if err != nil {
 			log.Println(err)
 			return
 		}
-		s.SelfShovel(client, server, client.RemoteAddr())
+		s.Shovel(client, server, client.RemoteAddr())
 	}
 }
 

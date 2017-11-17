@@ -30,19 +30,25 @@ func main()  {
 }
 
 func forward(client net.Conn)  {
-	var b [2048]byte
+	var b [1024]byte
 	n, err := client.Read(b[:])
 	client.Write([]byte{0x05, 0x00})
+
 	n, err = client.Read(b[:])
+	client.Write([]byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
+
 	if err != nil {
 		return
 	}
-	server1 := proxy.Server{"35.185.165.210", "8081", "Client"}
+
+	server1 := proxy.Server{"35.185.165.210", "8082", "Client"}
 	//server1 := proxy.Server{"127.0.0.1", "8082", "Client"}
+	host, port := server1.AnaHost(b, n)
+	log.Print("Dial start ", host, ":", port)
+
 	server := server1.Dial()
 	server.Write(b[:n])
-	client.Write([]byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 
 
-	go server1.SelfShovel(client, server, server.RemoteAddr())
+	go server1.Shovel(client, server, server.RemoteAddr())
 }

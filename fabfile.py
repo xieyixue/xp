@@ -9,8 +9,9 @@ env.hosts = [
 
 def deploy():
     local("GOOS=linux GOARCH=amd64 go build server.go")
-    put('server', '/app/first/main')
-    run('sudo supervisorctl restart proxy')
+    put('server', '/app/first/server')
+    run("chmod +x /app/first/server ")
+    run('mv /app/first/server /app/first/main; sudo supervisorctl restart proxy')
 
 
 def package():

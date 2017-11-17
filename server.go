@@ -21,8 +21,8 @@ func main() {
 	}
 	log.SetOutput(logFile)
 	log.SetFlags(log.LstdFlags|log.Lshortfile)
-	log.Print("proxy start listen 0.0.0.0:8081")
-	server := proxy.Server{"0.0.0.0", "8081", "Server"}
+	log.Print("proxy start listen 0.0.0.0:8082")
+	server := proxy.Server{"0.0.0.0", "8082", "Server"}
 	err := server.Listen()
 	if err != nil {
 		log.Panic(err)
